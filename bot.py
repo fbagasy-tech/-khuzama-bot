@@ -64,6 +64,19 @@ async def alekhwa(ctx):
     vc2 = await guild.create_voice_channel("・ قران و اغاني — 24/7", category=cat)
     await guild.create_text_channel("・ سوالف الاخوه", category=cat)
     await ctx.send("تم انشاء مجلس الاخوه ✅ استخدم !join و !play")
+    @bot.command(name="leave")
+async def leave_cmd(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("✅ طلعت من محطة خزامي")
+    else:
+        await ctx.send("انا مو داخل الروم اصلا")
+
+token = os.getenv("DISCORD_TOKEN")
+if not token:
+    print("حط التوكن في متغير البيئة DISCORD_TOKEN")
+else:
+    bot.run(token)
 
 token = os.getenv("DISCORD_TOKEN")
 if not token:
