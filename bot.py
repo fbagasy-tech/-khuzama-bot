@@ -1,57 +1,70 @@
-import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
+import os, asyncio, aiohttp
+from datetime import datetime
+import pytz
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+TIMEZONE = pytz.timezone("Asia/Riyadh")
+RADIO_KHUZAMA = "https://radioplus.sba.sa/live/7"
+RADIO_NIDAA = "https://radioplus.sba.sa/live/1"
+FFMPEG_OPTS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+last_event = None
+is_switching = False
+
+ALLOWED_NAMES = ["اذاعة خزامة", "راديو خزامة", "خزامة"]
 
 @bot.event
 async def on_ready():
-    print(f"البوت شغال: {bot.user}")
+    print(f"ONLINE {bot.user}")
+    for guild in bot.guilds:
+        for vc in guild.voice_channels:
+            if vc.name.strip().lower() in [n.lower() for n in ALLOWED_NAMES]:
+                try:
+                    conn = await vc.connect()
+                    conn.play(discord.FFmpegPCMAudio(RADIO_KHUZAMA, **FFMPEG_OPTS))
+                    break
+                except: pass
+    check_prayer.start()
+    keep_alive.start()
 
-@bot.command()
-async def alekhwa(ctx):
-    guild = ctx.guild
-    cat = await guild.create_category("•  الاخوة  •")
-    vc1 = await guild.create_voice_channel("•  مجلس الاخوة - 100  •", category=cat)
-    await vc1.edit(user_limit=0)
-    vc2 = await guild.create_voice_channel("•  قرآن و اغاني - 24/7  •", category=cat)
-    await guild.create_text_channel("•  سوالف الاخوة  •", category=cat)
-    await ctx.send("تم انشاء مجلس الاخوة ✅ استخدم !join و !play")
+@tasks.loop(minutes=1)
+async def check_prayer():
+    global last_event, is_switching
+    if is_switching: return
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get("http://api.aladhan.com/v1/timingsByCity?city=Riyadh&country=Saudi%20Arabia&method=4") as r:
+                data = await r.json()
+                timings = data['data']['timings']
+                now = datetime.now(TIMEZONE)
+                cur = now.strftime("%H:%M")
+                today = now.strftime("%Y-%m-%d")
+                for en in ["Fajr","Dhuhr","Asr","Maghrib","Isha"]:
+                    if timings[en] == cur and last_event!= f"{today}-{en}":
+                        last_event = f"{today}-{en}"
+                        is_switching = True
+                        for g in bot.guilds:
+                            vc = g.voice_client
+                            if vc:
+                                if vc.is_playing(): vc.stop()
+                                vc.play(discord.FFmpegPCMAudio(RADIO_NIDAA, **FFMPEG_OPTS))
+                                await asyncio.sleep(600)
+                                if vc.is_playing(): vc.stop()
+                                vc.play(discord.FFmpegPCMAudio(RADIO_KHUZAMA, **FFMPEG_OPTS))
+                        is_switching = False
+                        break
+    except: is_switching = False
 
-@bot.command(name="join")
-async def join_cmd(ctx):
-    if ctx.author.voice:
-        channel = ctx.author.voice.channel
-        if ctx.voice_client:
-            await ctx.voice_client.move_to(channel)
-        else:
-            await channel.connect()
-        await ctx.send(f"دخلت {channel}")
-    else:
-        await ctx.send("ادخل روم صوتي اول")
+@tasks.loop(minutes=5)
+async def keep_alive():
+    for g in bot.guilds:
+        vc = g.voice_client
+        if vc and not vc.is_playing() and not is_switching:
+            vc.play(discord.FFmpegPCMAudio(RADIO_KHUZAMA, **FFMPEG_OPTS))
 
-@bot.command(name="leave")
-async def leave_cmd(ctx):
-    if ctx.voice_client:
-        await ctx.voice_client.disconnect()
-        await ctx.send("✅ طلعت من محطة خزامي")
-    else:
-        await ctx.send("انا مو داخل الروم اصلا")
-
-@bot.command()
-async def stop(ctx):
-    if ctx.voice_client:
-        await ctx.voice_client.disconnect()
-        await ctx.send("طلعت ✅")
-    else:
-        await ctx.send("مو داخل روم")
-
-token = os.getenv("DISCORD_TOKEN")
-if not token:
-    print("حط التوكن في متغير البيئة DISCORD_TOKEN")
-else:
-    bot.run(token)
+bot.run(os.getenv("TOKEN")
