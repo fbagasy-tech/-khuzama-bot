@@ -78,8 +78,3 @@ if not token:
 else:
     bot.run(token)
 
-token = os.getenv("DISCORD_TOKEN")
-if not token:
-    print("حط التوكن في متغير البيئة DISCORD_TOKEN")
-else:
-    bot.run(token)
