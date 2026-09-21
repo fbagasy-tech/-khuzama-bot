@@ -67,4 +67,4 @@ async def keep_alive():
         if vc and not vc.is_playing() and not is_switching:
             vc.play(discord.FFmpegPCMAudio(RADIO_KHUZAMA, **FFMPEG_OPTS))
 
-bot.run(os.getenv("TOKEN")
+bot.run(os.getenv("TOKEN"))
